@@ -42,7 +42,10 @@ def build_prompt(row: pd.Series, n: int = 5) -> str:
 
 
 def generate_briefs(top: pd.DataFrame, out_path: str, n: int = 5) -> str:
-    """Write briefs (or prompts) to a Markdown file. Returns the mode used."""
+    """Write briefs (or prompts) to a Markdown file.
+
+    Returns "api" (all written by Claude), "mixed" (some fell back to prompts) or "prompts".
+    """
     use_api = bool(os.environ.get("ANTHROPIC_API_KEY"))
     client = None
     if use_api:
@@ -53,6 +56,7 @@ def generate_briefs(top: pd.DataFrame, out_path: str, n: int = 5) -> str:
             print("  ! ANTHROPIC_API_KEY is set but `anthropic` isn't installed (pip install anthropic). Writing prompts instead.")
             use_api = False
 
+    written = 0
     sections = ["# Design briefs\n"]
     for _, row in top.iterrows():
         prompt = build_prompt(row, n)
@@ -66,6 +70,7 @@ def generate_briefs(top: pd.DataFrame, out_path: str, n: int = 5) -> str:
                     messages=[{"role": "user", "content": prompt}],
                 )
                 sections.append("".join(b.text for b in msg.content if b.type == "text") + "\n")
+                written += 1
                 continue
             except Exception as e:
                 print(f"  ! API call failed ({e}); saving the prompt instead.")
@@ -73,4 +78,6 @@ def generate_briefs(top: pd.DataFrame, out_path: str, n: int = 5) -> str:
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(sections))
-    return "api" if use_api else "prompts"
+    if written == 0:
+        return "prompts"
+    return "api" if written == len(top) else "mixed"

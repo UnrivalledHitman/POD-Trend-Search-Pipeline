@@ -27,7 +27,7 @@ def summarise(path: str) -> None:
         earnings_inr=("royalty_inr", "sum"),
     )
     by_niche["sales_per_design"] = (by_niche["sales"] / by_niche["designs"]).round(2)
-    by_niche["fav_rate_%"] = (100 * by_niche["favorites"] / by_niche["views"].replace(0, pd.NA)).round(1)
+    by_niche["fav_rate_%"] = (100 * by_niche["favorites"] / by_niche["views"].replace(0, float("nan"))).round(1)
     by_niche = by_niche.sort_values("sales_per_design", ascending=False)
 
     print("\n=== Niches ranked by sales per design ===")

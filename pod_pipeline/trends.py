@@ -59,17 +59,25 @@ def fetch_interest(
             client.build_payload(kw_list, timeframe=timeframe, geo=geo, gprop=gprop)
             return client.interest_over_time()
 
-        df = _with_retry(call)
+        try:
+            df = _with_retry(call)
+        except Exception as e:
+            print(f"    ! Giving up on this batch ({type(e).__name__}: {e}). Keeping the others.")
+            continue
+        finally:
+            time.sleep(pause + random.uniform(0, 3))  # be polite, avoid 429s
         if df is None or df.empty:
             print("    (no data returned for this batch)")
             continue
         df = df.drop(columns=["isPartial"], errors="ignore")
 
         anchor_mean = df[anchor].mean()
-        if anchor_mean > 0:
-            df = df * (50.0 / anchor_mean)  # anchor average fixed at 50 everywhere
+        if not anchor_mean > 0:
+            # Can't rescale without the anchor, so this batch isn't comparable.
+            print(f"    ! Anchor '{anchor}' has no interest in this batch; skipping it. Try a more popular --anchor.")
+            continue
+        df = df * (50.0 / anchor_mean)  # anchor average fixed at 50 everywhere
         frames.append(df)
-        time.sleep(pause + random.uniform(0, 3))  # be polite, avoid 429s
 
     if not frames:
         return pd.DataFrame()
@@ -80,12 +88,36 @@ def fetch_interest(
     return merged
 
 
-def fetch_rising_queries(keyword: str, geo: str = "", timeframe: str = "today 12-m", top_n: int = 5) -> list[str]:
-    """Rising related searches - good for discovering new sub-niches."""
+def fetch_rising(
+    keywords: list[str],
+    geo: str = "",
+    timeframe: str = "today 12-m",
+    gprop: str = "",
+    pause: float = 8.0,
+) -> dict[str, list[str]]:
+    """Rising related searches for several keywords, sharing one client and pausing between calls."""
     client = _client()
+    out = {}
+    for i, kw in enumerate(keywords):
+        if i:
+            time.sleep(pause + random.uniform(0, 3))  # be polite, avoid 429s
+        out[kw] = fetch_rising_queries(kw, geo=geo, timeframe=timeframe, gprop=gprop, client=client)
+    return out
+
+
+def fetch_rising_queries(
+    keyword: str,
+    geo: str = "",
+    timeframe: str = "today 12-m",
+    gprop: str = "",
+    top_n: int = 5,
+    client=None,
+) -> list[str]:
+    """Rising related searches - good for discovering new sub-niches."""
+    client = client or _client()
 
     def call():
-        client.build_payload([keyword], timeframe=timeframe, geo=geo)
+        client.build_payload([keyword], timeframe=timeframe, geo=geo, gprop=gprop)
         return client.related_queries()
 
     try:

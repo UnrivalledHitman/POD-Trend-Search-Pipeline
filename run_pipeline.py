@@ -21,7 +21,7 @@ from pod_pipeline import briefs, score, trends, tracker
 
 
 def load_keywords(path: str) -> tuple[list[str], dict[str, float]]:
-    df = pd.read_csv(path, comment="#")
+    df = pd.read_csv(path, comment="#").dropna(subset=["niche"])
     df["niche"] = df["niche"].astype(str).str.strip()
     df = df[df["niche"] != ""].drop_duplicates("niche")
     comp = {}
@@ -37,7 +37,8 @@ def run(args) -> None:
     if len(keywords) < 2:
         raise SystemExit("Add at least 2 niches to the keywords file.")
     anchor = args.anchor or keywords[0]
-    if anchor not in keywords:
+    anchor_only = anchor not in keywords  # reference keyword, not a niche to rank
+    if anchor_only:
         keywords.insert(0, anchor)
     print(f"Analysing {len(keywords)} niches (anchor: '{anchor}', geo: {args.geo or 'worldwide'}, {args.timeframe})")
 
@@ -49,15 +50,17 @@ def run(args) -> None:
     if interest.empty:
         raise SystemExit("No trend data came back. Try again later (Google may be rate-limiting) or use --demo.")
 
-    feats = score.trend_features(interest)
+    niches = interest.drop(columns=[anchor]) if anchor_only else interest
+    feats = score.trend_features(niches)
     ranked = score.score_niches(feats, competition)
 
     top = ranked.head(args.top).copy()
     top["rising_queries"] = ""
     if args.rising and not args.demo:
         print("Fetching rising related searches for top niches...")
-        top["rising_queries"] = [", ".join(trends.fetch_rising_queries(n, geo=args.geo, timeframe=args.timeframe))
-                                 for n in top["niche"]]
+        rising = trends.fetch_rising(top["niche"].tolist(), geo=args.geo,
+                                     timeframe=args.timeframe, gprop=args.gprop)
+        top["rising_queries"] = [", ".join(rising[n]) for n in top["niche"]]
     ranked = ranked.merge(top[["niche", "rising_queries"]], on="niche", how="left").fillna({"rising_queries": ""})
 
     os.makedirs(args.out, exist_ok=True)
@@ -74,7 +77,8 @@ def run(args) -> None:
 
     if not args.no_briefs:
         mode = briefs.generate_briefs(ranked.head(args.top), briefs_path, n=args.ideas)
-        note = "written by Claude" if mode == "api" else "prompts to paste into Claude"
+        note = {"api": "written by Claude",
+                "mixed": "partly written by Claude, the rest as prompts"}.get(mode, "prompts to paste into Claude")
         print(f"\nDesign briefs ({note}): {briefs_path}")
     print(f"Ranking: {ranked_path}\nTrend curves: {curves_path}")
     if args.demo:

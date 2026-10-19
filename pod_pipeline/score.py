@@ -10,14 +10,22 @@ WEIGHTS = {"demand": 0.40, "growth": 0.35, "competition": 0.25}
 
 
 def trend_features(interest: pd.DataFrame, recent_weeks: int = 12) -> pd.DataFrame:
-    """Per keyword: average demand, recent demand, growth, and peak month."""
+    """Per keyword: average demand, recent demand, growth, and peak month.
+
+    "Recent" is a time window, not a row count, because Google returns daily,
+    weekly or monthly rows depending on the timeframe. For short timeframes the
+    window shrinks to the last quarter of the data.
+    """
     rows = []
     for kw in interest.columns:
         s = interest[kw].dropna()
         if s.empty:
             continue
-        recent = s.tail(recent_weeks).mean()
-        earlier = s.iloc[:-recent_weeks].mean() if len(s) > recent_weeks else s.mean()
+        span = s.index.max() - s.index.min()
+        window = min(pd.Timedelta(weeks=recent_weeks), span / 4)
+        is_recent = s.index >= s.index.max() - window  # always includes the last point
+        recent = s[is_recent].mean()
+        earlier = s[~is_recent].mean() if (~is_recent).any() else s.mean()
         growth = (recent - earlier) / max(earlier, 1.0)  # +0.30 = 30% more interest lately
         rows.append({
             "niche": kw,
@@ -43,7 +51,7 @@ def score_niches(features: pd.DataFrame, competition: dict[str, float]) -> pd.Da
     demand = _minmax(df["recent_interest"])
     growth = _minmax(df["growth_pct"].clip(-100, 200))
 
-    has_comp = df["competition"].notna() & (df["competition"] > 0)
+    has_comp = df["competition"].notna() & (df["competition"] >= 0)  # 0 listings = wide open
     if has_comp.any():
         # log scale: 500 vs 5,000 listings matters more than 50k vs 55k
         log_comp = df.loc[has_comp, "competition"].apply(lambda c: math.log10(c + 1))
