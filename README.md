@@ -17,9 +17,11 @@ It doesn't guarantee sales. It helps you decide what to design next, and gets sm
 ```bash
 git clone https://github.com/<your-username>/pod-trend-search-pipeline.git
 cd pod-trend-search-pipeline
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+uv sync                       # installs Python 3.12 + dependencies into .venv (https://docs.astral.sh/uv/)
 ```
+
+Then run the commands below with `uv run`, e.g. `uv run python run_pipeline.py --demo`.
+Without uv: `python -m venv .venv`, activate it, then `pip install -r requirements.txt`.
 
 ## Usage
 
@@ -41,7 +43,7 @@ Search each niche on Redbubble or Etsy and put the result count in the `competit
 ### AI-written briefs (optional)
 
 ```bash
-pip install anthropic
+uv sync --extra briefs              # or: pip install anthropic
 export ANTHROPIC_API_KEY=...        # Windows: set ANTHROPIC_API_KEY=...
 ```
 

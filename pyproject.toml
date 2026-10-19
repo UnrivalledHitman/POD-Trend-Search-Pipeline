@@ -1,0 +1,13 @@
+[project]
+name = "pod-trend-search-pipeline"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.0",
+    "pytrends>=4.9",
+]
+
+[project.optional-dependencies]
+briefs = [
+    "anthropic>=1.15.0",
+]
